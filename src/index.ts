@@ -46,6 +46,7 @@ type X = IXY & { width: number };
 type Y = IXY & { height: number };
 
 export interface IZScrollerOption {
+  isMobile?: boolean;
   autohideScrollbar?: boolean;
   minZoom?: number;
   maxZoom?: number;
@@ -108,6 +109,7 @@ class ZScroller {
       viewport,
       content,
       onScroll,
+      isMobile,
       autohideScrollbar,
       x,
       y,
@@ -119,14 +121,14 @@ class ZScroller {
     let indicatorsSize;
     let indicatorsPos;
 
-    let autohideScrollbarFlag=autohideScrollbar;
+    let autohideScrollbarFlag = autohideScrollbar;
 
     this._minIndicatorSize = minIndicatorSize || 25;
 
     this._options = _options;
 
     if (autohideScrollbar === undefined) {
-      autohideScrollbarFlag = isTouch;
+      autohideScrollbarFlag = isMobile || isTouch;
     }
 
     this._zOptions = {
@@ -365,7 +367,7 @@ class ZScroller {
     }
   }
   _setScrollbarOpacity(axis, opacity) {
-    if (isTouch) {
+    if (this._options.isMobile || isTouch) {
       if (
         !opacity ||
         (this._insideUserEvent && this._scrollbarsOpacity[axis] !== opacity)
@@ -471,65 +473,63 @@ class ZScroller {
     const { _scroller: scroller } = this;
 
     if (container) {
-      if (isTouch) {
-        const onTouchStart = (container, touches, timeStamp) => {
-          // Don't react if initial down happens on a form element
-          if (
-            (container && container.tagName.match(/input|textarea|select/i)) ||
-            this._disabled
-          ) {
-            return;
+      const onTouchStart = (container, touches, timeStamp) => {
+        // Don't react if initial down happens on a form element
+        if (
+          (container && container.tagName.match(/input|textarea|select/i)) ||
+          this._disabled
+        ) {
+          return;
+        }
+        this._clearScrollbarTimer();
+        this._insideUserEvent = true;
+        scroller.doTouchStart(touches, timeStamp);
+      };
+
+      this._bindEvent(
+        true,
+        container,
+        'touchstart',
+        e => {
+          if (e.touches) {
+            onTouchStart(
+              e.touches[0] && e.touches[0].container,
+              e.touches,
+              e.timeStamp,
+            );
+          } else {
+            onTouchStart(e.target, [e], e.timeStamp);
           }
-          this._clearScrollbarTimer();
-          this._insideUserEvent = true;
-          scroller.doTouchStart(touches, timeStamp);
-        };
+        },
+        false,
+      );
 
-        this._bindEvent(
-          true,
-          container,
-          TOUCH_START_EVENT,
-          e => {
-            if (e.touches) {
-              onTouchStart(
-                e.touches[0] && e.touches[0].container,
-                e.touches,
-                e.timeStamp,
-              );
-            } else {
-              onTouchStart(e.target, [e], e.timeStamp);
-            }
-          },
-          false,
-        );
+      const onTouchEnd = e => {
+        this._insideUserEvent = false;
+        scroller.doTouchEnd(e.timeStamp);
+      };
 
-        const onTouchEnd = e => {
-          this._insideUserEvent = false;
-          scroller.doTouchEnd(e.timeStamp);
-        };
+      const onTouchMove = (e, touches) => {
+        e.preventDefault();
+        scroller.doTouchMove(touches, e.timeStamp);
+        iOSWebViewFix(e, onTouchEnd);
+      };
 
-        const onTouchMove = (e, touches) => {
-          e.preventDefault();
-          scroller.doTouchMove(touches, e.timeStamp);
-          iOSWebViewFix(e, onTouchEnd);
-        };
+      this._bindEvent(
+        true,
+        container,
+        'touchmove',
+        e => {
+          if (this._insideUserEvent) {
+            const touches = e.touches ? e.touches : [e];
+            onTouchMove(e, touches);
+          }
+        },
+        false,
+      );
 
-        this._bindEvent(
-          true,
-          container,
-          'touchmove',
-          e => {
-            if (this._insideUserEvent) {
-              const touches = e.touches ? e.touches : [e];
-              onTouchMove(e, touches);
-            }
-          },
-          false,
-        );
-
-        this._bindEvent(true, container, TOUCH_END_EVENT, onTouchEnd, false);
-        this._bindEvent(true, container, TOUCH_CANCEL_EVENT, onTouchEnd, false);
-      }
+      this._bindEvent(true, container, 'touchend', onTouchEnd, false);
+      this._bindEvent(true, container, 'touchcancel', onTouchEnd, false);
 
       // prevent Horizontal Scrolling by default
       this._bindEvent(
@@ -673,7 +673,7 @@ class ZScroller {
     if (type === 'x') {
       this._scroller.scrollTo(
         (e.pageX - this._initPagePos.pageX) * this._initPagePos.ratio.x +
-        this._initPagePos.left,
+          this._initPagePos.left,
         this._initPagePos.top,
         false,
       );
@@ -681,7 +681,7 @@ class ZScroller {
       this._scroller.scrollTo(
         this._initPagePos.left,
         (e.pageY - this._initPagePos.pageY) * this._initPagePos.ratio.y +
-        this._initPagePos.top,
+          this._initPagePos.top,
         false,
       );
     }
